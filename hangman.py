@@ -1,42 +1,88 @@
-# Simple Hangman Example
-
 import random
 import os
-import sys
+from enum import Enum, auto
+import math
 
 #https://www.delftstack.com/de/howto/python/python-clear-console/
 def clearConsole():
-    command = 'clear'
-    if os.name in ('nt', 'dos'):  # If Machine is running on Windows, use cls
-        command = 'cls'
+    command = 'clear' if os.name not in ('nt', 'dos') else 'cls'  # If Machine is running on Windows, use cls
     os.system(command)
 
 
+class State(Enum):
+    START = auto(),
+    START_NEXT_ROUND = auto(),
+    PRINT_RULES = auto(),
+    PLAY_TURN = auto(),
+    CHECK_SOLUTION = auto(),
+    ASK_PLAY_AGAIN = auto(),
+    END = auto(),
+
+
 class Hangman():
-
     possible_words = ["Hund", "Waschmaschine", "Quietscheente"]
+    WRONG_GUESS_PENALTY = 1
+    WRONG_SOLUTION_PENALTY = 3
+    CORRECT_SOLUTION_BONUS = -5
 
-    def __init__(self):
-        self.word = random.choice(Hangman.possible_words).upper()
-        self.identified_letters = set([])
-        self.wrong_letters = set([])
-        self.errors_player1 = 0
-        self.errors_player2 = 0
-        self.whose_turn = random.choice([1,2])
+    def __init__(self, num_players=2):
+        self.num_players = num_players
+        self.state = State.START
 
+        self.errors = [0 for _ in range(num_players)]
+        self.active_player = random.choice(list(range(self.num_players)))
+        self.word = random.choice(Hangman.possible_words).lower()
+        self.identified_letters = set()
+        self.wrong_letters = set()
 
+    def run(self):
+        while self.state != State.END:
+            if self.state == State.START:
+                print("Hallo! Willkommen bei Hangman! Möchtest du erst die Regeln erfahren? (ja/nein)")
+                response = input('>')
+                if response.lower() == 'ja':
+                    self.state = State.PRINT_RULES
+                else:
+                    self.state = State.START_NEXT_ROUND
+                continue
 
-    def start(self):
-        print("Hallo! Willkommen bei Hangman! Möchtest du erst die Regeln erfahren?")
-        rules = input(">")
-        if rules.lower().strip() == "ja":
-            self.explain_rules()
-            go = input("Kann es losgehen?")
+            if self.state == State.PRINT_RULES:
+                self.explain_rules()
+                self.state = State.PLAY_TURN
+                continue
 
-        clearConsole()
-        self.print_current_game_state()
-        self.ask_for_letter()
+            if self.state == State.START_NEXT_ROUND:
+                self.prepare_round()
+                self.state = State.PLAY_TURN
+                continue
 
+            if self.state == State.PLAY_TURN:
+                self.print_current_game_state()
+                response = self.ask_for_letter()
+                self.state = self.evaluate_answer(response)
+                continue
+
+            if self.state == State.CHECK_SOLUTION:
+                solution = self.request_solution()
+                self.state = self.check_solution(solution)
+                continue
+
+            if self.state == State.ASK_PLAY_AGAIN:
+                self.state = self.ask_to_play_again()
+                continue
+
+            if self.state == State.END:
+                self.announce_winners()
+                print("Okay! Bye-bye!")
+
+    def next_player(self):
+        self.active_player = (self.active_player + 1) % self.num_players
+
+    def prepare_round(self):
+        self.next_player()
+        self.word = random.choice(Hangman.possible_words).lower()
+        self.identified_letters = set()
+        self.wrong_letters = set()
 
     def explain_rules(self):
         clearConsole()
@@ -52,123 +98,102 @@ class Hangman():
               "Wer das Wort rät, bekommt 5 Strafpunkte abgezogen."
               "Wer am Ende die wenigsten Strafpunkte hat, gewinnt! , gewinnt! Viel Spaß :)")
 
-
     def print_current_game_state(self):
         print("Welches Wort wird gesucht?")
         output = [l if l in self.identified_letters else "_" for l in self.word]
         print(" ".join(output))
-        print("Player 1:", self.errors_player1, "Strafpunkt(e)")
-        print("Player 2:", self.errors_player2, "Strafpunkt(e)")
+        for player in range(self.num_players):
+            print(f"Spieler{player + 1}: ", self.errors[player], " Strafpunkt(e)")
         print()
 
-
-
     def ask_for_letter(self):
-        print("Player", self.whose_turn, "ist an der Reihe!")
+        print(f"Spieler{self.active_player + 1} ist an der Reihe!")
         print("Welchen Buchstaben rätst du?")
-        guessed_letter = input(">").upper()
+        return input(">").upper()
 
-
+    def evaluate_answer(self, guessed_letter):
+        guessed_letter = guessed_letter.lower()
         if len(guessed_letter) != 1:
+            if guessed_letter == "lösen":
+                return State.CHECK_SOLUTION
 
-            if guessed_letter.lower() == "lösen":
-                solved = self.solution()
-                if solved:
-                    self.announce_winner()
-                    self.play_again()
-                else:
-                    self.print_current_game_state()
-                    self.ask_for_letter()
+            if guessed_letter == "regeln":
+                return State.PRINT_RULES
 
-            elif guessed_letter.lower() == "regeln":
-                self.explain_rules()
-                self.print_current_game_state()
-                self.ask_for_letter()
-
-            else:
-                clearConsole()
-                print("Was war das? Wenn du lösen möchtest, schreib bitte 'lösen'! "
-                             "Ansonsten verstehe ich nur einzelne Buchstaben :)")
-                self.print_current_game_state()
-                self.ask_for_letter()
-
-
-        elif guessed_letter in self.word:
             clearConsole()
+            print("Was war das? Wenn du lösen möchtest, schreib bitte 'lösen'! "
+                  "Ansonsten verstehe ich nur einzelne Buchstaben :)")
+            return State.PLAY_TURN
+
+        clearConsole()
+        if guessed_letter in self.word:
             print("Gut geraten!")
-            self.identified_letters.add(guessed_letter)
-
+            self.identified_letters.add(guessed_letter.lower())
         else:
-            self.wrong_letters.add(guessed_letter)
-            clearConsole()
-            print("Leider nein. Player", self.whose_turn, "bekommt 1 Strafpunkt.")
+            self.wrong_letters.add(guessed_letter.lower())
+            print(f"Leider nein. Spieler{self.active_player + 1} bekommt {Hangman.WRONG_GUESS_PENALTY} Strafpunkt.")
             print("Ihr habt bereits folgende Buchstaben falsch geraten:", ",".join(sorted(self.wrong_letters)))
             print()
 
-            if self.whose_turn == 1:
-                self.errors_player1 += 1
-                self.whose_turn = 2
-            else:
-                self.errors_player2 += 1
-                self.whose_turn = 1
+            self.errors[self.active_player] += Hangman.WRONG_GUESS_PENALTY
+            self.next_player()
 
-        self.print_current_game_state()
-        self.ask_for_letter()
+        return State.PLAY_TURN
 
-
-    def solution(self):
+    def request_solution(self):
         print("Du möchtest lösen! Welches Wort denkst du wird gesucht?")
-        solution = input(">").upper()
-        if solution == self.word:
-            print("Das ist das richtige Wort, Gratulation! Player", self.whose_turn, "werden 5 Strafpunkte abgezogen!")
-            if self.whose_turn == 1:
-                self.errors_player1 -= 5
-            else:
-                self.errors_player2 -= 5
-            return True
+        return input(">")
 
-
+    def check_solution(self, solution):
+        if solution.lower() == self.word.lower():
+            print(f"Das ist das richtige Wort, Gratulation! Spieler{self.active_player + 1} werden {-Hangman.CORRECT_SOLUTION_BONUS} Strafpunkte abgezogen!")
+            self.errors[self.active_player] += Hangman.CORRECT_SOLUTION_BONUS
+            return State.ANNOUNCE_WINNER
         else:
             clearConsole()
-            print(solution, "ist leider nicht das gesuchte Wort... Player", self.whose_turn, "bekommt 3 Strafpunkte :(")
-            if self.whose_turn == 1:
-                self.errors_player1 += 3
-                self.whose_turn = 2
-            else:
-                self.errors_player2 += 3
-                self.whose_turn = 1
+            print(f"{solution} ist leider nicht das gesuchte Wort... Player{self.active_player + 1} bekommt {Hangman.WRONG_SOLUTION_PENALTY} Strafpunkte :(")
+            self.errors[self.active_player] += Hangman.WRONG_SOLUTION_PENALTY
+            self.next_player()
+            return State.PLAY_TURN
 
-            return False
-
-
-    def announce_winner(self):
-        winner = None
-        if self.errors_player1 < self.errors_player2:
-            winner = "Player1"
-        elif self.errors_player1 > self.errors_player2:
-            winner = "Player2"
+    def announce_winners(self):
+        winners = self.determine_winners()
+        winner_strings = [f'Spieler{i + 1}' for i in winners]
+        num_winners = len(winners)
 
         print("Finaler Punktestand:")
-        print("Player 1:", self.errors_player1, "Strafpunkt(e)")
-        print("Player 2:", self.errors_player2, "Strafpunkt(e)")
+        for player in range(self.num_players):
+            print(f"Spieler{player + 1}: ", self.errors[player], " Strafpunkt(e)")
 
-        if winner:
-            print("Gratulation,", winner, "hat gewonnen!")
+        if num_winners == 1:
+            print(f"Gratulation, {winner_strings[0]}, du hast gewonnen!")
+        elif 1 < num_winners < self.num_players:
+            print(f"Gratulation, {', '.join(winner_strings)}, ihr habt gewonnen!")
         else:
-            print("Unentschieden! Ihr seid einfach beide gleich gut :)")
+            print("Unentschieden! Ihr seid gleich gut :)")
 
-    def play_again(self):
-        again = input("Möchtet ihr nochmal spielen?")
+    def ask_to_play_again(self):
+        again = input("Möchtet ihr nochmal spielen? (ja/nein)")
         if again.lower().strip() == "ja":
-            clearConsole()
-            main()
+            return State.START_NEXT_ROUND
         else:
-            print("Okay! Bye-bye!")
-            sys.exit()
+            return State.END
+
+    def determine_winners(self):
+        winners = []
+        best_score = math.inf
+        for i, score in enumerate(self.errors):
+            if score == best_score:
+                winners.append(i)
+            elif score < best_score:
+                best_score = score
+                winners = [i]
+        return winners
+
 
 def main():
     game = Hangman()
-    game.start()
+    game.run()
 
 
 if __name__ == "__main__":
