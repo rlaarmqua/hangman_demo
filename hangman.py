@@ -1,7 +1,8 @@
 import random
 import os
-from enum import Enum, auto
+from enum import Enum
 import math
+import sys
 
 #https://www.delftstack.com/de/howto/python/python-clear-console/
 def clearConsole():
@@ -10,13 +11,13 @@ def clearConsole():
 
 
 class State(Enum):
-    START = auto(),
-    START_NEXT_ROUND = auto(),
-    PRINT_RULES = auto(),
-    PLAY_TURN = auto(),
-    CHECK_SOLUTION = auto(),
-    ASK_PLAY_AGAIN = auto(),
-    END = auto(),
+    START = 0,
+    PREPARE_ROUND = 1,
+    DISPLAY_RULES = 2,
+    PLAY_TURN = 3,
+    REQUEST_SOLUTION = 4,
+    PLAY_AGAIN = 5,
+    END = -1,
 
 
 class Hangman():
@@ -38,22 +39,22 @@ class Hangman():
     def run(self):
         """Starts the game."""
         self.state = State.START
-        while self.state != State.END:
+        while True:
             if self.state == State.START:
                 print("Hallo! Willkommen bei Hangman! Möchtest du erst die Regeln erfahren? (ja/nein)")
                 response = input('>')
                 if response.lower() == 'ja':
-                    self.state = State.PRINT_RULES
+                    self.state = State.DISPLAY_RULES
                 else:
-                    self.state = State.START_NEXT_ROUND
+                    self.state = State.PREPARE_ROUND
                 continue
 
-            if self.state == State.PRINT_RULES:
+            if self.state == State.DISPLAY_RULES:
                 self.explain_rules()
                 self.state = State.PLAY_TURN
                 continue
 
-            if self.state == State.START_NEXT_ROUND:
+            if self.state == State.PREPARE_ROUND:
                 self.prepare_round()
                 self.state = State.PLAY_TURN
                 continue
@@ -64,18 +65,19 @@ class Hangman():
                 self.state = self.evaluate_answer(response)
                 continue
 
-            if self.state == State.CHECK_SOLUTION:
+            if self.state == State.REQUEST_SOLUTION:
                 solution = self.request_solution()
                 self.state = self.check_solution(solution)
                 continue
 
-            if self.state == State.ASK_PLAY_AGAIN:
+            if self.state == State.PLAY_AGAIN:
                 self.state = self.ask_to_play_again()
                 continue
 
             if self.state == State.END:
                 self.announce_winners()
                 print("Okay! Bye-bye!")
+                sys.exit()
 
     def next_player(self):
         """Sets the active player to the next in line."""
@@ -132,10 +134,10 @@ class Hangman():
         # some command was entered, instead of a letter
         if len(user_input) != 1:
             if user_input == "lösen":
-                return State.CHECK_SOLUTION
+                return State.REQUEST_SOLUTION
 
             if user_input == "regeln":
-                return State.PRINT_RULES
+                return State.DISPLAY_RULES
 
             clearConsole()
             print("Was war das? Wenn du lösen möchtest, schreib bitte 'lösen'! "
@@ -170,7 +172,7 @@ class Hangman():
         if solution.lower() == self.word.lower():
             print(f"Das ist das richtige Wort, Gratulation! Spieler{self.active_player + 1} werden {-Hangman.CORRECT_SOLUTION_BONUS} Strafpunkte abgezogen!")
             self.errors[self.active_player] += Hangman.CORRECT_SOLUTION_BONUS
-            return State.ANNOUNCE_WINNER
+            return State.PLAY_AGAIN
         else:
             clearConsole()
             print(f"{solution} ist leider nicht das gesuchte Wort... Player{self.active_player + 1} bekommt {Hangman.WRONG_SOLUTION_PENALTY} Strafpunkte :(")
@@ -199,7 +201,7 @@ class Hangman():
         """Asks the players whether they want to play again and returns the corresponding next game state."""
         again = input("Möchtet ihr nochmal spielen? (ja/nein)")
         if again.lower().strip() == "ja":
-            return State.START_NEXT_ROUND
+            return State.PREPARE_ROUND
         else:
             return State.END
 
