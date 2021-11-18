@@ -26,7 +26,8 @@ class Hangman():
     WRONG_SOLUTION_PENALTY = 3
     CORRECT_SOLUTION_BONUS = -5
 
-    def __init__(self, num_players=2):
+    def __init__(self, num_players: int):
+        """Creates a new instance of Hangman. The number of players can be varied using the num_player parameter."""
         self.num_players = num_players
         self.state = State.START
 
@@ -120,7 +121,7 @@ class Hangman():
         print("Welchen Buchstaben rätst du?")
         return input(">").upper()
 
-    def evaluate_answer(self, user_input):
+    def evaluate_answer(self, user_input: str):
         """
         Evaluates the given user input and returns the corresponding next game state.
 
@@ -219,7 +220,7 @@ class Hangman():
 
 
 def main():
-    game = Hangman()
+    game = Hangman(num_players=2)
     game.run()
 
 
